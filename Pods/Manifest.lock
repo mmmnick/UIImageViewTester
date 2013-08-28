@@ -5,10 +5,15 @@ PODS:
 
 DEPENDENCIES:
   - AFHTTPRequestOperationLogger (~> 0.10.0)
-  - AFNetworking (~> 1.3)
+  - AFNetworking (from `https://github.com/mmmnick/AFNetworking.git`, branch `cache-killer`)
+
+EXTERNAL SOURCES:
+  AFNetworking:
+    :branch: cache-killer
+    :git: https://github.com/mmmnick/AFNetworking.git
 
 SPEC CHECKSUMS:
   AFHTTPRequestOperationLogger: 34ba125cb9eeb77a3b67aaaca105720ba3a0798c
-  AFNetworking: 7f9bcd7c287a75476cd5c61e82fd3380e93e4c54
+  AFNetworking: 91bb494e2bd884a93d60a7a3126bc65b873486b4
 
 COCOAPODS: 0.20.2

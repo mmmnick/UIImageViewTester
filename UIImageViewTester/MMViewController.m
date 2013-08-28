@@ -24,6 +24,7 @@
 
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
+//    [UIImageView clearSharedImageCache];
 }
 
 #pragma mark - UICollectionViewDataSource Conformance

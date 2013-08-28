@@ -73,6 +73,11 @@
  */
 - (void)cancelImageRequestOperation;
 
+/** 
+ Clears the shared image cache
+ */
++ (void)clearSharedImageCache;
+
 @end
 
 #endif
