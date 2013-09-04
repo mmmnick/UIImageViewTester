@@ -30,18 +30,25 @@
 - (UIImage *)cachedImageForRequest:(NSURLRequest *)request;
 - (void)cacheImage:(UIImage *)image
         forRequest:(NSURLRequest *)request;
+- (void)beginImageAccessForKey:(NSString *)cacheKey;
+- (void)endImageAccessForKey:(NSString *)cacheKey;
 @end
+
+static inline NSString * AFImageCacheKeyFromURLRequest(NSURLRequest *request);
 
 #pragma mark -
 
 static char kAFImageRequestOperationObjectKey;
+static char kAFImagePurgeableDataCacheKeyKey;
 
 @interface UIImageView (_AFNetworking)
 @property (readwrite, nonatomic, strong, setter = af_setImageRequestOperation:) AFImageRequestOperation *af_imageRequestOperation;
+@property (readwrite, nonatomic, strong, setter = af_setPurgeableDataCacheKey:) NSString *af_purgeableDataCacheKey;
 @end
 
 @implementation UIImageView (_AFNetworking)
 @dynamic af_imageRequestOperation;
+@dynamic af_purgeableDataCacheKey;
 @end
 
 #pragma mark -
@@ -54,6 +61,14 @@ static char kAFImageRequestOperationObjectKey;
 
 - (void)af_setImageRequestOperation:(AFImageRequestOperation *)imageRequestOperation {
     objc_setAssociatedObject(self, &kAFImageRequestOperationObjectKey, imageRequestOperation, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSString *)af_purgeableDataCacheKey {
+    return (NSString *)objc_getAssociatedObject(self, &kAFImagePurgeableDataCacheKeyKey);
+}
+
+- (void)af_setPurgeableDataCacheKey:(NSString *)cacheKey {
+    objc_setAssociatedObject(self, &kAFImagePurgeableDataCacheKeyKey, cacheKey, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 + (NSOperationQueue *)af_sharedImageRequestOperationQueue {
@@ -72,6 +87,7 @@ static char kAFImageRequestOperationObjectKey;
     static dispatch_once_t oncePredicate;
     dispatch_once(&oncePredicate, ^{
         _af_imageCache = [[AFImageCache alloc] init];
+        [_af_imageCache setCountLimit:200];
     });
 
     return _af_imageCache;
@@ -90,6 +106,9 @@ static char kAFImageRequestOperationObjectKey;
 - (void)setImageWithURL:(NSURL *)url
        placeholderImage:(UIImage *)placeholderImage
 {
+
+    [self endImageAccess];
+
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request addValue:@"image/*" forHTTPHeaderField:@"Accept"];
 
@@ -102,6 +121,9 @@ static char kAFImageRequestOperationObjectKey;
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure
 {
     [self cancelImageRequestOperation];
+
+    self.af_purgeableDataCacheKey =
+    AFImageCacheKeyFromURLRequest(urlRequest);
 
     UIImage *cachedImage = [[[self class] af_sharedImageCache] cachedImageForRequest:urlRequest];
     if (cachedImage) {
@@ -155,6 +177,56 @@ static char kAFImageRequestOperationObjectKey;
     self.af_imageRequestOperation = nil;
 }
 
+- (void)endImageAccess {
+
+    NSString *cacheKey = self.af_purgeableDataCacheKey;
+    if (cacheKey != nil) {
+        [[[self class] af_sharedImageCache] endImageAccessForKey:cacheKey];
+    }
+}
+
+- (void)beginImageAccess {
+
+    NSString *cacheKey = self.af_purgeableDataCacheKey;
+    if (cacheKey != nil) {
+        [[[self class] af_sharedImageCache] beginImageAccessForKey:cacheKey];
+    }
+}
+
+@end
+
+#pragma mark -
+
+@interface AFPurgeableImage : NSObject <NSDiscardableContent> {
+
+    int32_t _accessCount;
+}
+
+@property (nonatomic, strong) UIImage *image;
+
+@end
+
+@implementation AFPurgeableImage
+
+- (BOOL)beginContentAccess {
+    _accessCount++;
+    return YES;
+}
+
+- (void)endContentAccess {
+    _accessCount = MAX(0, _accessCount-1);
+}
+
+- (void)discardContentIfPossible {
+    if (_accessCount <= 0) {
+        self.image = nil;
+    }
+}
+
+- (BOOL)isContentDiscarded {
+    return self.image == nil;
+}
+
 @end
 
 #pragma mark -
@@ -174,15 +246,44 @@ static inline NSString * AFImageCacheKeyFromURLRequest(NSURLRequest *request) {
             break;
     }
 
-	return [self objectForKey:AFImageCacheKeyFromURLRequest(request)];
+    AFPurgeableImage *wrapper =
+    [self objectForKey:AFImageCacheKeyFromURLRequest(request)];
+    [wrapper beginContentAccess];
+
+    return wrapper.image;
 }
 
 - (void)cacheImage:(UIImage *)image
         forRequest:(NSURLRequest *)request
 {
     if (image && request) {
-        [self setObject:image forKey:AFImageCacheKeyFromURLRequest(request)];
+
+        NSString *cacheKey =
+        AFImageCacheKeyFromURLRequest(request);
+
+        NSObject <NSDiscardableContent> *discardableContent =
+        [self objectForKey:cacheKey];
+
+        [discardableContent endContentAccess];
+
+        AFPurgeableImage *wrapper = [[AFPurgeableImage alloc] init];
+        wrapper.image = image;
+        [wrapper beginContentAccess];
+
+        [self setObject:wrapper forKey:AFImageCacheKeyFromURLRequest(request)];
     }
+}
+
+- (void)beginImageAccessForKey:(NSString *)cacheKey {
+    [[self objectForKey:cacheKey] beginContentAccess];
+}
+
+- (void)endImageAccessForKey:(NSString *)cacheKey {
+
+    NSObject <NSDiscardableContent> *discardableContent =
+    [self objectForKey:cacheKey];
+
+    [discardableContent endContentAccess];
 }
 
 @end
