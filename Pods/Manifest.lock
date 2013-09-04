@@ -5,11 +5,11 @@ PODS:
 
 DEPENDENCIES:
   - AFHTTPRequestOperationLogger (~> 0.10.0)
-  - AFNetworking (from `https://github.com/mmmnick/AFNetworking.git`, branch `cache-killer`)
+  - AFNetworking (from `https://github.com/mmmnick/AFNetworking.git`, branch `NSDiscardableContent`)
 
 EXTERNAL SOURCES:
   AFNetworking:
-    :branch: cache-killer
+    :branch: NSDiscardableContent
     :git: https://github.com/mmmnick/AFNetworking.git
 
 SPEC CHECKSUMS:
